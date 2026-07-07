@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Watermarked Image Sharing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-brand">
+      <span class="topbar-icon">🔐</span>
+      <span>Secure Watermarked Image Sharing</span>
+    </div>
+    <div class="topbar-badge" id="statusBadge">Chờ thao tác</div>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- ══════════════ NGƯỜI GỬI ══════════════ -->
+  <section class="zone zone-sender">
+    <div class="zone-header">
+      <span class="zone-icon">👤</span>
+      <h2>Người gửi</h2>
+    </div>
+
+    <!-- Bước 1: Chọn ảnh -->
+    <div class="step" id="s1">
+      <div class="step-head"><span class="step-num">1</span>Chọn &amp; Upload ảnh</div>
+      <div class="step-body">
+        <label class="lbl">Tệp ảnh (PNG / JPG)</label>
+        <input type="file" id="fileInput" accept="image/*" onchange="previewFile()">
+        <div class="img-row">
+          <div class="img-box">
+            <div class="img-label">Ảnh gốc</div>
+            <img id="previewOrig" alt="">
+          </div>
+          <div class="img-box">
+            <div class="img-label">Sau watermark</div>
+            <div class="img-wrap">
+              <img id="previewWm" alt="">
+              <div class="stamp" id="stamp"></div>
+            </div>
+          </div>
+        </div>
+        <div class="row-fields">
+          <div class="field">
+            <label class="lbl">Owner ID</label>
+            <input id="ownerId" type="text" placeholder="vd. owner_U100">
+          </div>
+          <div class="field">
+            <label class="lbl">Receiver ID</label>
+            <input id="receiverId" type="text" placeholder="vd. receiver_U200">
+          </div>
+        </div>
+        <div class="row-fields">
+          <div class="field">
+            <label class="lbl">Loại watermark</label>
+            <select id="wmType">
+              <option value="visible">Visible (hiện)</option>
+              <option value="invisible">Invisible / LSB (ẩn)</option>
+            </select>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doUpload()">① Upload ảnh</button>
+          <button class="btn" id="btnWm" onclick="doWatermark()" disabled>② Gắn watermark</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bước 2: Tạo metadata + Mã hóa -->
+    <div class="step" id="s2">
+      <div class="step-head"><span class="step-num">2</span>Tạo metadata &amp; Mã hóa AES-GCM</div>
+      <div class="step-body">
+        <div class="meta-grid" id="metaDisplay">
+          <div class="meta-row"><span>image_id</span><span>—</span></div>
+          <div class="meta-row"><span>owner_id</span><span>—</span></div>
+          <div class="meta-row"><span>receiver_id</span><span>—</span></div>
+          <div class="meta-row"><span>watermark_hash</span><span>—</span></div>
+          <div class="meta-row"><span>timestamp</span><span>—</span></div>
+          <div class="meta-row"><span>nonce</span><span>—</span></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnEnc" onclick="doEncrypt()" disabled>③ Mã hóa &amp; tạo metadata.json</button>
+        </div>
+        <div class="package-box" id="packageBox" style="display:none">
+          <div class="pkg-title">📦 Gói dữ liệu gửi đi</div>
+          <div class="pkg-items">
+            <div class="pkg-item">🔒 <span id="pkgCipher">—</span></div>
+            <div class="pkg-item">📄 <span id="pkgMeta">—</span></div>
+          </div>
+          <div class="channel">🛡️ Kênh truyền an toàn (TLS/HTTPS)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ NGƯỜI NHẬN ══════════════ -->
+  <section class="zone zone-receiver">
+    <div class="zone-header">
+      <span class="zone-icon">👥</span>
+      <h2>Người nhận</h2>
+    </div>
+
+    <!-- Bước 3: Giải mã -->
+    <div class="step" id="s3">
+      <div class="step-head"><span class="step-num">3</span>Nhận gói &amp; Giải mã &amp; Xác thực</div>
+      <div class="step-body">
+        <div class="lbl">Receiver ID để giải mã</div>
+        <input id="receiverIdDec" type="text" placeholder="Nhập đúng Receiver ID">
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnDec" onclick="doDecrypt()" disabled>④ Giải mã AES-GCM</button>
+        </div>
+        <div class="result-box" id="decResult" style="display:none"></div>
+        <div class="img-box" id="decImgBox" style="display:none">
+          <div class="img-label">Ảnh đã giải mã</div>
+          <img id="previewDec" alt="">
+        </div>
+      </div>
+    </div>
+
+    <!-- Bước 4: Kiểm tra watermark + phát hiện sửa đổi -->
+    <div class="step" id="s4">
+      <div class="step-head"><span class="step-num">4</span>Trích xuất &amp; Kiểm tra Watermark</div>
+      <div class="step-body">
+        <div class="btn-row">
+          <button class="btn" id="btnVerify" onclick="doVerify()" disabled>⑤ Kiểm tra watermark</button>
+          <button class="btn" id="btnTamper" onclick="doTamper()" disabled>🔍 Phát hiện sửa đổi</button>
+        </div>
+        <div id="verifyResult" style="display:none"></div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ══════════════ AUDIT LOG ══════════════ -->
+  <section class="zone zone-log">
+    <div class="zone-header">
+      <span class="zone-icon">📋</span>
+      <h2>Ghi log (Audit Log)</h2>
+    </div>
+    <div class="step-body">
+      <table class="audit-table" id="auditTable">
+        <thead>
+          <tr>
+            <th>Thời gian (UTC)</th>
+            <th>Sự kiện</th>
+            <th>Chi tiết</th>
+            <th>Kết quả</th>
+          </tr>
+        </thead>
+        <tbody id="auditBody">
+          <tr><td colspan="4" class="empty">Chưa có dữ liệu — hãy bắt đầu từ bước Upload</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div><!-- end .page -->
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
